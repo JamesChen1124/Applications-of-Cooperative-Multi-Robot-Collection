@@ -1,9 +1,8 @@
 # Applications of Cooperative Multi-Robot Collection
 
 ## Overview
-This project designs an automated multi-robot system for ball collection (tennis, badminton, table tennis) using YOLOv8n, Python, and Arduino.  
+This project designs an automated multi-robot system for ball collection (tennis, badminton, table tennis)[tennis focused] using YOLOv8n, Python, and Arduino.  
 Robots are equipped with ESP32-CAM for vision input and controlled via PID-based servo mechanisms.  
-Task allocation is optimized using the Hungarian Algorithm.
 
 ## Project Structure
 - `src/` – Python and Arduino source code  
