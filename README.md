@@ -6,7 +6,7 @@ Robots are equipped with ESP32-CAM for vision input and controlled via PID-based
 
 ## Project Structure
 - `src/` – Python and Arduino source code
-- 'ttc/' - Python and Arduino test or practice code
+- `ttc/` - Python and Arduino test or practice code
 - `cad/` – Circuit diagrams and CAD files  
 - `docs/` – Reports and project documents [Mandarin version]  
 - `dataset/` – Small sample of training images (full dataset available via Roboflow)  
