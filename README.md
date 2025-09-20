@@ -3,6 +3,7 @@
 ## Overview
 This project designs an automated multi-robot system for ball collection (tennis, badminton, table tennis)[tennis focused] using YOLOv8n, Python, and Arduino.  
 Robots are equipped with ESP32-CAM for vision input and controlled via PID-based servo mechanisms.  
+-Go watch the result video on Reddit:(https://www.reddit.com/r/arduino/comments/1ks14i3/comment/mtuj34n/?context=3)
 
 ## Project Structure
 - `src/` – Python and Arduino source code
