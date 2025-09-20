@@ -14,7 +14,7 @@ Task allocation is optimized using the Hungarian Algorithm.
 ## Dataset
 A sample dataset is provided in `/dataset/`.  
 The full dataset (9,500 images) is hosted on Roboflow:  
-👉 [View and Download Dataset]([https://universe.roboflow.com/your-dataset-link](https://app.roboflow.com/jameschen/tennis-table-tennis-badminton/7))
+👉 [View and Download Dataset][https://universe.roboflow.com/your-dataset-link](https://app.roboflow.com/jameschen/tennis-table-tennis-badminton/7))
 
 ## Features
 - Multi-robot collaboration for object retrieval
