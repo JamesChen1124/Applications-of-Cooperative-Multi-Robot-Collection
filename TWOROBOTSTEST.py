@@ -1,10 +1,7 @@
-###############################################################################
-#           Dual ESP32-CAM  +  Two Arduino                                    #
 # ───────────────────────────────────────────────────────────────────────── #
-#  • v4.5-FG   : FAST-GRIP（停車即夾）                                       #
-#  • v4.6-Lock : 多目標 → 鎖定最近(最大框)                                    #
-#  • v4.7-HUD  : ★在畫面列出「所有目標名稱 + Confidence」並方框標註★          #
-###############################################################################
+#  • v4.5-FG   : FAST-GRIP (Grip immediately after stopping)                  #
+#  • v4.6-Lock : Multi-target → Lock on the nearest (largest bounding box)    #
+#  • v4.7-HUD  : ★Display "all target names + confidence" with bounding box★  #
 
 import cv2, sys, time, queue, serial, urllib.request, numpy as np
 import threading as th
@@ -13,19 +10,20 @@ import serial.tools.list_ports as list_ports
 from   collections import deque
 from   ultralytics import YOLO
 
-# ──────────────────────────── 使用者可調區 ────────────────────────────
+# ──────────────────────────── User Configurable Area ────────────────────────────
 URL_CAM1 = "http://172.20.10.3/capture"
 URL_CAM2 = "http://172.20.10.5/capture"
 
 PORT_CAM1 = "COM11"
 PORT_CAM2 = "COM5"
 
-INV_X_CAM1 , INV_Y_CAM1 = ( True,  True)   # CAM1: LR+UD 反
-INV_X_CAM2 , INV_Y_CAM2 = ( True, False)   # CAM2: LR 反
+INV_X_CAM1 , INV_Y_CAM1 = ( True,  True)   # CAM1: LR + UD flip
+INV_X_CAM2 , INV_Y_CAM2 = ( True, False)   # CAM2: LR flip
 
-OFFSET_CAM1 = (0, 122)      # +x 右 / +y 下
+OFFSET_CAM1 = (0, 122)      # +x → right / +y → down
 OFFSET_CAM2 = (30, 115)
-# ---------- PID 參數 ----------
+
+# ---------- PID parameters ----------
 PID_CAM1 = dict(
     kp_x=0.35, ki_x=0.21, kd_x=0.002,
     kp_y=0.55, ki_y=0.18, kd_y=0.002,
@@ -41,9 +39,9 @@ PID_CAM2 = dict(
     int_lim =70,
 )
 
-GRIP_SEC = 18.2            # 機械手臂抓取停車時間 (s)
+GRIP_SEC = 18.2            # Time for robotic arm gripping (s)
 
-# ─────────────────────────── YOLO / 常數 ───────────────────────────
+# ─────────────────────────── YOLO / Constants ───────────────────────────
 MODEL_PATH = "runs/detect/train28/weights/best.pt"
 TARGET_LBL = ["tennis", "table tennis", "badminton"]
 CONF_TH    = 0.65
@@ -53,23 +51,22 @@ IMG_W, IMG_H   = 640, 480
 CAM_CX, CAM_CY = IMG_W//2, IMG_H//2
 INFER_FPS      = 10
 INFER_ITV      = 1/INFER_FPS
-SEARCH_PWM     = 220     # 搜索時轉速
+SEARCH_PWM     = 220     # Motor speed during searching
 
 # FAST-GRIP
 AVG_WIN   = 1
 OK_FRAMES = 1
 S2G_DELAY = 0.000
 
-# 多目標鎖定
-MISS_TOL  = 5            # 連續 miss 多少幀數後放棄鎖定
+# Multi-target lock
+MISS_TOL  = 5            # Drop lock after missing target for consecutive frames
 
 # UART
 UART_TOUT = 0.6
 SEND_GAP  = 0.04
 
 
-
-# ─────────────────────────── 小工具 ───────────────────────────
+# ─────────────────────────── Utilities ───────────────────────────
 def clamp(v, lo, hi):    return hi if v > hi else lo if v < lo else v
 def ports():             return [p.device for p in list_ports.comports()]
 def open_serial(port, baud=57600):
@@ -77,12 +74,12 @@ def open_serial(port, baud=57600):
         s = serial.Serial(port, baud, timeout=0, write_timeout=0)
         print(f"[UART] {port} opened");  return s
     except serial.SerialException as e:
-        print(f"[UART] 開啟 {port} 失敗：{e}\n可用埠：{ports()}"); return None
+        print(f"[UART] Failed to open {port}: {e}\nAvailable ports: {ports()}"); return None
 
-# ─────────────────────────── Robot 類 ───────────────────────────
+# ─────────────────────────── Robot Class ───────────────────────────
 class Robot:
     def __init__(self,name,url,port,pid,offset=(0,0),inv_x=False,inv_y=False):
-        # ---- 基本 ----
+        # ---- Basic ----
         self.name=name; self.url=url
         self.offx,self.offy = offset
         self.inv_x,self.inv_y = inv_x,inv_y
@@ -93,20 +90,20 @@ class Robot:
         if self.ser: th.Thread(target=self._rx,daemon=True).start()
         self.last_sent=("S",0.0)
 
-        # ---- 佇列 & 執行緒 ----
+        # ---- Queues & Threads ----
         self.q_frame=queue.Queue(4); self.q_disp=queue.Queue(4)
         th.Thread(target=self._grab,daemon=True).start()
         th.Thread(target=self._loop,daemon=True).start()
 
-        # ---- 狀態 ----
+        # ---- State ----
         self.state="SEARCH"; self.grip_t=0
         self.ok_cnt=0; self.last_inf=time.time()
 
-        # PID 變數
+        # PID variables
         self.mv_ex=deque(maxlen=AVG_WIN); self.mv_ey=deque(maxlen=AVG_WIN)
         self.ix=self.iy=0.0; self.px=self.py=0.0; self.t_pid=time.time()
 
-        # 鎖定
+        # Lock
         self.lock_box=None; self.miss_cnt=0
 
         # Log
@@ -143,7 +140,7 @@ class Robot:
                 self.q_frame.put(img)
             except: time.sleep(0.05)
 
-    # ---------- 主迴圈 ----------
+    # ---------- Main Loop ----------
     def _loop(self):
         while True:
             frame=self.q_frame.get()
@@ -156,7 +153,7 @@ class Robot:
                 self._disp(img,"S")
                 continue
 
-            # FPS 篩選
+            # FPS filter
             if time.time()-self.last_inf<INFER_ITV:
                 self._disp(img,"S"); continue
             self.last_inf=time.time()
@@ -182,19 +179,19 @@ class Robot:
                 else:
                     self._send(cmd); self._disp(img,cmd,best,all_dets)
 
-    # ---------- 影像預處理 ----------
+    # ---------- Image Preprocessing ----------
     def _prep(self,f):
         img=cv2.resize(f,(IMG_W,IMG_H))
         if self.inv_x: img=cv2.flip(img,1)
         if self.inv_y: img=cv2.flip(img,0)
-        return cv2.convertScaleAbs(img,alpha=0.8,beta=30)#(alpha對比,beta亮度)
+        return cv2.convertScaleAbs(img,alpha=0.8,beta=30) # (alpha contrast, beta brightness)
 
     # ---------- Detect + HUD ----------
     def _detect(self,img):
         """
-        回傳：
-          best_det  : (x1,y1,x2,y2,cx,cy) or None  → 用於鎖定 / PID
-          all_dets  : [(lbl,conf,x1,y1,x2,y2,cx,cy), ...] → 用於 HUD
+        Returns:
+          best_det  : (x1,y1,x2,y2,cx,cy) or None  → Used for lock / PID
+          all_dets  : [(lbl,conf,x1,y1,x2,y2,cx,cy), ...] → Used for HUD
         """
         try: r=YOLO_MODEL(img,verbose=False)[0]
         except: return None, []
@@ -210,7 +207,7 @@ class Robot:
             cand.append((area,x1,y1,x2,y2,cx,cy))
             all_out.append((lbl,conf,x1,y1,x2,y2,cx,cy))
 
-        # --- 鎖定邏輯(避免看到多個目標物導致系統錯亂) ---
+        # --- Lock logic (avoid system confusion with multiple targets) ---
         if not cand:
             self.miss_cnt+=1
             if self.miss_cnt>=MISS_TOL: self.lock_box=None
@@ -277,9 +274,9 @@ class Robot:
                       p["pwm_min"],p["pwm_max"]))
         return f"{move},{pwm}"
 
-    # ---------- 顯示 ----------
+    # ---------- Display ----------
     def _disp(self,img,cmd="S",best=None,all_dets=None):
-        # 1. 先畫所有候選框 & 標籤
+        # 1. Draw all candidate boxes & labels
         if all_dets:
             for lbl,conf,x1,y1,x2,y2,cx,cy in all_dets:
                 color=(0,180,255) if (best and (x1,y1,x2,y2,cx,cy)==best) else (0,255,0)
@@ -287,14 +284,14 @@ class Robot:
                 cv2.putText(img,f"{lbl} {conf:.2f}",(x1,y1-6),
                             cv2.FONT_HERSHEY_SIMPLEX,0.55,color,2)
 
-            # 2. 左上角：列出目標物名稱 + 自信度conf
+            # 2. Top-left: list target names + confidence
             hud_y=20
-            for lbl,conf,_,_,_,_,_,_ in all_dets[:5]:   # 顯示前 5 筆避免太多會很亂
+            for lbl,conf,_,_,_,_,_,_ in all_dets[:5]:   # Show first 5 to avoid clutter
                 cv2.putText(img,f"{lbl}: {conf:.2f}",(5,hud_y),
                             cv2.FONT_HERSHEY_PLAIN,1.2,(255,255,255),2)
                 hud_y+=18
 
-        # 3. 準心 & 系統當前狀態
+        # 3. Crosshair & system state
         cv2.circle(img,(CAM_CX,CAM_CY),4,(255,0,0),-1)
         cv2.putText(img,f"{self.name} {self.state}",(10,IMG_H-25),
                     cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,255,0),2)
@@ -304,7 +301,7 @@ class Robot:
         if self.q_disp.full(): self.q_disp.get_nowait()
         self.q_disp.put(img)
 
-# ─────────────────────────── 建立兩台車 ───────────────────────────
+# ─────────────────────────── Initialize Two Robots ───────────────────────────
 bot1=Robot("CAM1",URL_CAM1,PORT_CAM1,PID_CAM1,
            OFFSET_CAM1,INV_X_CAM1,INV_Y_CAM1)
 bot2=Robot("CAM2",URL_CAM2,PORT_CAM2,PID_CAM2,
