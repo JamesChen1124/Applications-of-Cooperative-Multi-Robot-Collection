@@ -19,10 +19,9 @@ The full dataset (9,500 images) is hosted on Roboflow:
 - Multi-robot collaboration for object retrieval
 - YOLOv8n vision model for real-time detection
 - Vision-based servo control using PID
-- Hungarian Algorithm for task allocation
 
 ## Hardware
 - Arduino Mega / ESP32-CAM
 - Mobile robot with robotic arm
-- Bluetooth communication
+- Bluetooth module
 
