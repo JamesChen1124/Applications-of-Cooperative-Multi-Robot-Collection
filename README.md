@@ -8,7 +8,7 @@ Task allocation is optimized using the Hungarian Algorithm.
 ## Project Structure
 - `src/` – Python and Arduino source code  
 - `cad/` – Circuit diagrams and CAD files  
-- `docs/` – Reports and project documents  
+- `docs/` – Reports and project documents [Mandarin version]  
 - `dataset/` – Small sample of training images (full dataset available via Roboflow)  
 
 ## Dataset
