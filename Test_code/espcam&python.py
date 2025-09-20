@@ -1,42 +1,42 @@
 import cv2
 from ultralytics import YOLO
 
-# 加載 YOLOv8 模型
-model = YOLO("C:\Users\陳俊言\OneDrive\桌面\esp32-cam-server\datasets\tennis\result\weights\best.pt")  # 替換為訓練好的 YOLO 模型路徑
+# Load YOLOv8 model
+model = YOLO("C:\\Users\\James\\OneDrive\\Desktop\\esp32-cam-server\\datasets\\tennis\\result\\weights\\best.pt")  # Replace with your trained YOLO model path
 
-# ESP32-CAM 的 HTTP 串流 URL
-stream_url = "http://172.20.10.3:81/stream"  # 確保此 URL 指向 ESP32-CAM 的影像串流
+# ESP32-CAM HTTP stream URL
+stream_url = "http://172.20.10.3:81/stream"  # Make sure this URL points to the ESP32-CAM video stream
 
-# 開啟影像串流
+# Open video stream
 cap = cv2.VideoCapture(stream_url)
 
-# 檢查串流是否成功打開
+# Check if the stream was successfully opened
 if not cap.isOpened():
-    print("無法連接到 ESP32-CAM 的影像串流")
+    print("Unable to connect to ESP32-CAM video stream")
     exit()
 
 while True:
-    # 從串流中讀取一幀影像
+    # Read a frame from the stream
     ret, frame = cap.read()
     if not ret:
-        print("無法從影像串流中獲取幀，嘗試重新連接...")
+        print("Failed to retrieve frame from video stream, trying to reconnect...")
         cap.release()
         cap = cv2.VideoCapture(stream_url)
         continue
 
-    # 使用 YOLOv8 模型進行物件檢測
+    # Run YOLOv8 model for object detection
     results = model(frame)
 
-    # 繪製檢測結果
+    # Draw detection results
     annotated_frame = results[0].plot()
 
-    # 顯示結果
+    # Display results
     cv2.imshow("ESP32-CAM Detection", annotated_frame)
 
-    # 按 'q' 鍵退出
+    # Exit on 'q' key
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# 釋放資源
+# Release resources
 cap.release()
 cv2.destroyAllWindows()
