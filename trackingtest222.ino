@@ -1,66 +1,60 @@
-/*  Robot2 底盘 + 机械臂整合版
-    指令集：
-      ◆ 底盘：  F,pwm  /  B,pwm  /  TL,pwm  /  TR,pwm  /  S   → DONE
-      ◆ 机械臂：G (一次完整抓取流程)                    → DONE
-
-    其他脚位保持不变，仅新增 4×Servo（8,9,10,11）。
-*/
+//Final version
 
 #include <Arduino.h>
 #include <Servo.h>
 
 // ────────────────────────────────────────
-//  机械臂 Servo 定义
+//  Robotic Arm Servo Definitions
 // ────────────────────────────────────────
-Servo motorA;   // SG90  ‑ Base
-Servo motorB;   // LD‑220MG ‑ Shoulder
-Servo motorC;   // LD‑220MG ‑ Elbow
-Servo motorD;   // MG996R ‑ Gripper
+Servo motorA;   // SG90  - Base
+Servo motorB;   // LD-220MG - Shoulder
+Servo motorC;   // LD-220MG - Elbow
+Servo motorD;   // MG996R - Gripper
 
-int posA = 90,  posB = 90,  posC = 90,  posD = 0;   // 当前角度
-int targetA = 90, targetB = 90, targetC = 90, targetD = 0; // 目标角度
+int posA = 90,  posB = 90,  posC = 90,  posD = 0;            // current angles
+int targetA = 90, targetB = 90, targetC = 90, targetD = 0;   // target angles
 
-const int everyA = 25;   // ms / °  (平滑步进速度)
+const int everyA = 25;   // ms / degree (smooth stepping speed)
 const int everyB = 15;
 const int everyC = 15;
 const int everyD = 15;
 
 bool movingA = false, movingB = false, movingC = false, movingD = false;
-int  stepNow  = -1;      // ‑1: 空闲, 0‑12: 流程步骤
-bool armActive = false;  // 机械臂流程运行标志
+int  stepNow  = -1;      // -1: idle, 0-12: sequence step index
+bool armActive = false;  // flag indicating the arm sequence is running
 
 // ────────────────────────────────────────
-//  底盘马达脚位 (保持原样)
+//  Chassis Motor Pins (unchanged)
 // ────────────────────────────────────────
-const int R1   = 22; // 右后 IN1
-const int R2   = 23; // 右后 IN2
-const int R3   = 24; // 右前 IN3
-const int R4   = 25; // 右前 IN4
-const int ENA1 = 5;  // 右后 PWM
-const int ENB1 = 4;  // 右前 PWM
+const int R1   = 22; // right-rear IN1
+const int R2   = 23; // right-rear IN2
+const int R3   = 24; // right-front IN3
+const int R4   = 25; // right-front IN4
+const int ENA1 = 5;  // right-rear PWM
+const int ENB1 = 4;  // right-front PWM
 
-const int L1   = 27; // 左前 IN1
-const int L2   = 26; // 左前 IN2
-const int L3   = 28; // 左后 IN3
-const int L4   = 29; // 左后 IN4
-const int ENA2 = 6;  // 左前 PWM
-const int ENB2 = 7;  // 左后 PWM
+const int L1   = 27; // left-front IN1
+const int L2   = 26; // left-front IN2
+const int L3   = 28; // left-rear IN3
+const int L4   = 29; // left-rear IN4
+const int ENA2 = 6;  // left-front PWM
+const int ENB2 = 7;  // left-rear PWM
 
 // ────────────────────────────────────────
-//  通讯 & 超时
+/*  Communication & Timeout */
 // ────────────────────────────────────────
 const unsigned long RX_TIMEOUT = 100;  // ms
 unsigned long lastRx = 0;
 String incoming;
 
 // ────────────────────────────────────────
-//  PWM 范围
+//  PWM Range
 // ────────────────────────────────────────
 const int PWM_MIN = 0;
 const int PWM_MAX = 255;
 
 // ────────────────────────────────────────
-//  底盘控制工具函数
+//  Chassis Control Helpers
 // ────────────────────────────────────────
 void stopAll() {
   analogWrite(ENA1, 0); analogWrite(ENB1, 0);
@@ -112,7 +106,7 @@ void turnRight(int pwm) {
 }
 
 // ────────────────────────────────────────
-//  机械臂 Servo 平滑移动
+//  Smooth Servo Motion for the Arm
 // ────────────────────────────────────────
 void checkServoA() {
   static uint32_t t = 0; if (millis() - t < everyA) return; t = millis();
@@ -144,7 +138,7 @@ void checkServoD() {
 }
 
 // ────────────────────────────────────────
-//  机械臂抓取流程状态机 (12 步)
+//  Arm Grasping Sequence State Machine (12 steps)
 // ────────────────────────────────────────
 void executeSequence() {
   static unsigned long lastTime = 0;
@@ -236,13 +230,13 @@ void executeSequence() {
 }
 
 // ────────────────────────────────────────
-//  初始化
+//  Initialization
 // ────────────────────────────────────────
 void setup() {
   Serial.begin(57600);
   lastRx = millis();
 
-  // 底盘 GPIO
+  // Chassis GPIO
   pinMode(R1, OUTPUT); pinMode(R2, OUTPUT);
   pinMode(R3, OUTPUT); pinMode(R4, OUTPUT);
   pinMode(ENA1, OUTPUT); pinMode(ENB1, OUTPUT);
@@ -251,8 +245,8 @@ void setup() {
   pinMode(ENA2, OUTPUT); pinMode(ENB2, OUTPUT);
   stopAll();
 
-  // 机械臂 Servo
-  motorA.attach(8, 544, 2400); // (Pin, min, max)
+  // Arm servos
+  motorA.attach(8, 544, 2400); // (pin, min, max)
   motorB.attach(9);
   motorC.attach(10);
   motorD.attach(11);
@@ -265,17 +259,17 @@ void setup() {
 }
 
 // ────────────────────────────────────────
-//  主循环
+//  Main Loop
 // ────────────────────────────────────────
 void loop() {
-  // 1. 处理串口指令
+  // 1) Handle serial commands
   while (Serial.available()) {
     incoming = Serial.readStringUntil('\n');
     incoming.trim();
     if (incoming.length() == 0) continue;
     lastRx = millis();
 
-    // ---- S / G 属于无 PWM 指令 ----
+    // ---- S / G are commands without PWM value ----
     if (incoming == "S") {
       stopAll();
       Serial.println("DONE");
@@ -294,7 +288,7 @@ void loop() {
       continue;
     }
 
-    // ---- 其余带 PWM 指令 ----
+    // ---- Other commands with PWM value ----
     int comma = incoming.indexOf(',');
     String cmd = comma > 0 ? incoming.substring(0, comma) : incoming;
     int pwm    = comma > 0 ? incoming.substring(comma + 1).toInt() : 0;
@@ -303,15 +297,15 @@ void loop() {
     else if (cmd == "B")  driveBackward(pwm);
     else if (cmd == "TL") turnLeft(pwm);
     else if (cmd == "TR") turnRight(pwm);
-    else                    stopAll();
+    else                  stopAll();
 
     Serial.println("DONE");
   }
 
-  // 2. 通讯超时停车
+  // 2) Stop if communication timeout
   if (millis() - lastRx > RX_TIMEOUT) stopAll();
 
-  // 3. 机械臂流程执行
+  // 3) Run arm sequence
   if (armActive) {
     checkServoA();
     checkServoB();
